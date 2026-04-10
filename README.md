@@ -28,6 +28,6 @@ python sensortag_plot.py
 ```
 
 ### Simple Keys Integration
-By default, the SensorTag's physical hardware buttons are bound to the emulator:
+By default, the SensorTag's X and Y accelleration axes are mapped to the emulator's left stick X and Y; and the physical hardware buttons are bound to:
 - **Left Button (1):** Gamepad `A`
 - **Right Button (2):** Gamepad `B`
