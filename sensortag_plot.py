@@ -186,7 +186,7 @@ def update_orientation(accel: list, gyro: list, mag: list,
                        gyro_bias: list):
     """
     Feed one IMU sample into the Madgwick filter.
-    Returns {'roll': float, 'pitch': float, 'yaw': float} in degrees,
+    Returns dict with 'roll','pitch','yaw' (degrees) and 'quaternion' [w,x,y,z],
     or None if imufusion is unavailable.
     """
     global _last_orientation_time
@@ -201,20 +201,26 @@ def update_orientation(accel: list, gyro: list, mag: list,
         dt = 0.1
     else:
         dt = now - _last_orientation_time
-        dt = max(0.001, min(dt, 1.0))  # clamp to sane range
+        dt = max(0.001, min(dt, 1.0))
     _last_orientation_time = now
 
     g_cal = [gyro[i] - gyro_bias[i] for i in range(3)]
 
     _ahrs.update(
-        np.array(g_cal,   dtype=float),
-        np.array(accel,   dtype=float),
-        np.array(mag,     dtype=float),
+        np.array(g_cal,  dtype=float),
+        np.array(accel,  dtype=float),
+        np.array(mag,    dtype=float),
         dt,
     )
 
-    euler = _ahrs.quaternion.to_euler()  # [roll, pitch, yaw] degrees
-    return {'roll': euler[0], 'pitch': euler[1], 'yaw': euler[2]}
+    q = _ahrs.quaternion
+    euler = q.to_euler()  # [roll, pitch, yaw] degrees
+    return {
+        'roll':       euler[0],
+        'pitch':      euler[1],
+        'yaw':        euler[2],
+        'quaternion': [q.w, q.x, q.y, q.z],
+    }
 
 
 # ==========================================
@@ -490,6 +496,7 @@ if ENABLE_PLOT:
     from PyQt5.QtCore import QTimer, Qt
     from PyQt5.QtGui import QFont
     import pyqtgraph as pg
+    from sensortag_tracking import TrackingTab
 
     class SensorTagDashboard(QMainWindow):
         def __init__(self):
@@ -530,16 +537,18 @@ if ENABLE_PLOT:
             self.tabs = QTabWidget()
             root_layout.addWidget(self.tabs)
 
-            # Tabs are populated in Steps 7–10
+            # Tabs are populated in build methods below
             self._tab_imu         = QWidget()
             self._tab_orientation = QWidget()
             self._tab_environment = QWidget()
             self._tab_status      = QWidget()
+            self._tab_tracking    = TrackingTab()
 
             self.tabs.addTab(self._tab_imu,         "IMU")
             self.tabs.addTab(self._tab_orientation, "Orientation")
             self.tabs.addTab(self._tab_environment, "Environment")
             self.tabs.addTab(self._tab_status,      "Status")
+            self.tabs.addTab(self._tab_tracking,    "3D Tracking")
 
             self._build_imu_tab()
             self._build_orientation_tab()
@@ -573,6 +582,7 @@ if ENABLE_PLOT:
                     self._recv_times.pop(0)
                 self._update_imu(pkt)
                 self._update_orientation(pkt)
+                self._tab_tracking.feed(pkt)
 
             # Update frequency label
             if len(self._recv_times) > 1:
@@ -617,7 +627,7 @@ if ENABLE_PLOT:
         def _build_imu_tab(self):
             layout = QVBoxLayout(self._tab_imu)
 
-            self._plot_accel = self._make_plot("Accelerometer (G)",      -8,   8,  "G")
+            self._plot_accel = self._make_plot("Accelerometer (G)",      -2,   2,  "G")
             self._plot_gyro  = self._make_plot("Gyroscope (deg/s)",    -500, 500, "deg/s")
             self._plot_mag   = self._make_plot("Magnetometer (µT)",    -500, 500, "µT")
 
